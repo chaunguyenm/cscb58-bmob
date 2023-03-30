@@ -56,7 +56,8 @@
 .eqv RESET 112
 
 # Other
-.eqv SIZE 64			# Size of bitmap display
+.eqv SIZE_BY_UNIT 64		# Size of bitmap display by buffer unit
+.eqv SIZE_BY_BYTE 256		# Size of one bitmap display row by byte
 .eqv SLEEP_TIME 1000		# Sleeping time in miliseconds
 
 
@@ -64,134 +65,148 @@
 
 .text
 .globl main
-main: 		li $t0, BASE_ADDRESS
-		li $t1, FIRE_FILL
-		li $t2, FIRE_LINE
-		li $t3, BOMB
-		li $t4, WATER_FILL
-		li $t5, WATER_LINE
-		li $t6, PLATFORM
-		li $t7, ERASE
+main:		# Draw first platform
+ 		li $a0, 0			# Store x coordinate
+		li $a1, 17			# Store y coordinate
+		jal bitmap_address		# Compute start address
+		add $a0, $s0, $zero		# Store start address
+		li $a1, 21			# Store size of platform
+		jal draw_platform		# Draw platform
 		
-		# Draw platform
-		li $a0, 0
-		li $a1, 17
-		jal bitmap_address
-		
-		add $s0, $s0, $t0
-		sw $t6, 0($s0)
-		sw $t6, 4($s0)
-		sw $t6, 8($s0)
-		sw $t6, 12($s0)
-		sw $t6, 16($s0)
-		sw $t6, 20($s0)
-		sw $t6, 24($s0)
-		sw $t6, 28($s0)
-		sw $t6, 32($s0)
-		sw $t6, 36($s0)
-		sw $t6, 40($s0)
-		sw $t6, 44($s0)
-		sw $t6, 48($s0)
-		sw $t6, 52($s0)
-		sw $t6, 56($s0)
-		sw $t6, 60($s0)
-		sw $t6, 64($s0)
-		sw $t6, 68($s0)
-		sw $t6, 72($s0)
-		sw $t6, 76($s0)
-		
-		li $a0, 0
-		li $a1, 18
-		jal bitmap_address
-		add $s0, $s0, $t0
-		sw $t6, 0($s0)
-		sw $t6, 4($s0)
-		sw $t6, 8($s0)
-		sw $t6, 12($s0)
-		sw $t6, 16($s0)
-		sw $t6, 20($s0)
-		sw $t6, 24($s0)
-		sw $t6, 28($s0)
-		sw $t6, 32($s0)
-		sw $t6, 36($s0)
-		sw $t6, 40($s0)
-		sw $t6, 44($s0)
-		sw $t6, 48($s0)
-		sw $t6, 52($s0)
-		sw $t6, 56($s0)
-		sw $t6, 60($s0)
-		sw $t6, 64($s0)
-		sw $t6, 68($s0)
-		sw $t6, 72($s0)
-		sw $t6, 76($s0)
-		
-		# Sleep
-		li $v0, 32
-		li $a0, SLEEP_TIME
-		syscall
-		
-		# Redraw to create animation of platform
-		li $a0, 0
-		li $a1, 17
-		jal bitmap_address
-		
-		add $s0, $s0, $t0
-		sw $t7, 0($s0)
-		sw $t6, 80($s0)
-		
-		li $a0, 0
-		li $a1, 18
-		jal bitmap_address
-		
-		add $s0, $s0, $t0
-		sw $t7, 0($s0)
-		sw $t6, 80($s0)
-		
-		# Draw water
-		li $a0, 3
-		li $a1, 14
-		jal bitmap_address
-		
-		addi $s0, $s0, BASE_ADDRESS
-		sw $t4, 0($s0)
-		sw $t4, 4($s0)
-		sw $t4, 8($s0)
-		sw $t5, 256($s0)
-		sw $t4, 260($s0)
-		sw $t4, 264($s0)
-		sw $t5, 512($s0)
-		sw $t5, 516($s0)
-		sw $t4, 520($s0)
-		
-		# Receive keyboard input
-keyboard:	li $t9, KEYBOARD 
-		lw $t8, 0($t9) 
-		beq $t8, 1, pressed	# if ==1 key is pressed
-		j keyboard
-		
-pressed:	lw $t2, 4($t9)		# read what key is pressed
-		beq $t2, RIGHT, right
-		j keyboard
+		# Draw second platform
+		li $a0, 32			# Store x coordinate
+		li $a1, 30			# Store y coordinate
+		jal bitmap_address		# Compute start address
+		add $a0, $s0, $zero		# Store start address
+		li $a1, 32			# Store size of platform
+		jal draw_platform		# Draw platform
 
-right:		sw $t7, 0($s0)
-		sw $t7, 256($s0)
-		sw $t7, 512($s0)
-		sw $t4, 8($s0)
-		sw $t4, 264($0)
-		sw $t4, 520($s0)
-		sw $t5, 260($s0)
-		sw $t5, 516($s0)
-		j keyboard
+		# Draw third platform
+		li $a0, 9			# Store x coordinate
+		li $a1, 45			# Store y coordinate
+		jal bitmap_address		# Compute start address
+		add $a0, $s0, $zero		# Store start address
+		li $a1, 46			# Store size of platform
+		jal draw_platform		# Draw platform
+		
+		# Draw first enemy
+		li $a0, 0			# Store x coordinate
+		li $a1, 14			# Store y coordinate
+		jal bitmap_address		# Compute start address
+		add $a0, $s0, $zero		# Store start address
+		jal draw_enemy			# Draw enemy
+			
+		# Draw second enemy
+		li $a0, 53			# Store x coordinate
+		li $a1, 27			# Store y coordinate
+		jal bitmap_address		# Compute start address
+		add $a0, $s0, $zero		# Store start address
+		jal draw_enemy			# Draw enemy
+		
+		# Draw third enemy
+		li $a0, 52			# Store x coordinate
+		li $a1, 42			# Store y coordinate
+		jal bitmap_address		# Compute start address
+		add $a0, $s0, $zero		# Store start address
+		jal draw_enemy			# Draw enemy
+		
+		# Draw player
+		li $a0, 21			# Store x coordinate
+		li $a1, 40			# Store y coordinate
+		jal bitmap_address		# Compute start address
+		add $a0, $s0, $zero		# Store start address
+		jal draw_player			# Draw player
+		
+		# Draw bomb
+		li $a0, 45			# Store x coordinate
+		li $a1, 42			# Store y coordinate
+		jal bitmap_address		# Compute start address
+		add $a0, $s0, $zero		# Store start address
+		jal draw_bomb			# Draw bomb
 		
 		# End program
 		li $v0, 10
 		syscall
 		
-bitmap_address:	li $s0, SIZE
+# Arguments:	x coordinate	$a0
+#		y coordinate	$a1
+# Registers:	tmp, return	$s0
+# Returns:	Start address	$s0
+bitmap_address:	li $s0, SIZE_BY_UNIT
 		mult $a1, $s0
 		mflo $s0
 		add $s0, $s0, $a0
 		sll $s0, $s0, 2
+		addi $s0, $s0, BASE_ADDRESS
+		jr $ra
+
+# Arguments:	Start address	$a0
+#		Size		$a1
+# Registers:	Color value	$s0
+#		Current address	$s1
+# Returns:	Draw a platform of size $a1 starting from $a0	
+draw_platform:	li $s0, PLATFORM		# Load color for platform
+		add $s1, $a0, $zero		# Intialize counter
+		sll $a1, $a1, 2			# Multiply size by 4 to use as offset
+		add $a1, $a1, $a0		# Last address to color
+pf_loop:	bge $s1, $a1, pf_fin		# Branch to fin when done coloring
+		sw $s0, 0($s1)			# Color first row
+		sw $s0, SIZE_BY_BYTE($s1)	# Color second row
+		addi $s1, $s1, 4		# Increment address
+		j pf_loop
+pf_fin:		jr $ra
+
+# Arguments:	Start address	$a0
+# Registers:	Color value	$s0
+# Returns:	Draw an enemy at $a0	
+draw_enemy:	li $s0, WATER_FILL		# Load filled color for enemy
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 8($a0)
+		sw $s0, 260($a0)
+		sw $s0, 264($a0)
+		sw $s0, 520($a0)
+		li $s0, WATER_LINE		# Load line color for enemy
+		sw $s0, 256($a0)
+		sw $s0, 512($a0)
+		sw $s0, 516($a0)
+		jr $ra
+
+# Arguments:	Start address	$a0
+# Registers:	Color value	$s0
+# Returns:	Draw player at $a0	
+draw_player:	li $s0, FIRE_LINE		# Load line color for player
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 252($a0)
+		sw $s0, 256($a0)
+		sw $s0, 260($a0)
+		sw $s0, 508($a0)
+		sw $s0, 516($a0)
+		sw $s0, 520($a0)
+		sw $s0, 760($a0)
+		sw $s0, 764($a0)
+		sw $s0, 776($a0)
+		sw $s0, 1016($a0)
+		sw $s0, 1032($a0)
+		li $s0, FIRE_FILL		# Load fill color for player
+		sw $s0, 512($a0)
+		sw $s0, 768($a0)
+		sw $s0, 772($a0)
+		sw $s0, 1020($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1028($a0) 
+		jr $ra
+
+# Arguments:	Start address	$a0
+# Registers:	Color value	$s0
+# Returns:	Draw bomb at $a0		
+draw_bomb:	li $s0, BOMB			# Load color for bomb
+		sw $s0, 0($a0)
+		sw $s0, 252($a0)
+		sw $s0, 256($a0)
+		sw $s0, 260($a0)
+		sw $s0, 508($a0)
+		sw $s0, 512($a0)
 		jr $ra
 		
-draw_platform:	
