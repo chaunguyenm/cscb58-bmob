@@ -64,12 +64,12 @@
 .eqv PLAYER_RIGHT 2
 .eqv BOMB_HEIGHT 3
 
-.eqv SLEEP_TIME 40		# Sleeping time in miliseconds
-.eqv JUMP_HEIGHT 12		# How high player can jump
+.eqv SLEEP_TIME 2000		# Sleeping time in miliseconds
+.eqv JUMP_HEIGHT 20		# How high player can jump
 
 
 .data
-playerState:	.word		1000:3
+playerState:	.word		0, 1000, 0
 enemyState:	.word		0:7
 bombState:	.word		0:7
 platformState:	.word		0:7
@@ -172,7 +172,7 @@ main:		# Check for collision with enemies
 		lw $t0, 0($s7)			# $t0 stores number of enemies
 		addi $s7, $s7, 4		# $s7 stores address of enemy
 		
-ce_loop:	beqz $t0, cp			# When done checking all enemies, check platform
+ce_loop:	beqz $t0, cj			# When done checking all enemies, check jumping state
 
 		lw $a0, 0($s7)			# $a0 stores location of enemy
 		jal xy_address			# Calculate xy-coordinates for enemy
@@ -205,8 +205,14 @@ ce_skip:	addi $s7, $s7, 8		# $a0 stores address of next enemy
 		addi $t0, $t0, -1		# Decrement $t0 (number of enemies left to check)
 		j ce_loop
 		
-		# Check if player is standing on platform
-cp:		la $a1, playerState		# Get address of playerState
+		# Check if player is jumping
+cj:		la $a1, playerState		# Get address of playerState
+		lw $a0, 0($a1)			# Load current location of player into $a0
+		lw $t0, 8($a1)			# Loading jumping state into $t0
+		bgtz $t0, jump_once
+		
+cp:		# Check if player is standing on platform
+		la $a1, playerState		# Get address of playerState
 		lw $a0, 0($a1)			# Load current location of player into $a0
 		jal xy_address			# Calculate xy-coordinates for player
 		add $t1, $s0, $zero		# $t1 stores x-coordinate of player
@@ -268,7 +274,7 @@ go_right:	la $a1, playerState		# Get address of player location
 		bge $s0, SIZE_BY_UNIT, main	# If next x coordinate goes beyond screen, do nothing
 		add $a0, $a2, $zero		# Restore current address
 		jal erase_player		# Erase player at current location
-		addi $a0, $a0, 4		# Get new address after key pressed
+		addi $a0, $a0, 8		# Get new address after key pressed
 		sw $a0, 0($a1)			# Store new address in memeory
 		jal draw_player			# Draw player at new location
 		j main
@@ -281,30 +287,36 @@ go_left:	la $a1, playerState		# Get address of player location
 		blt $s0, 0, main		# If next x coordinate goes beyond screen, do nothing
 		add $a0, $a2, $zero		# Restore current address
 		jal erase_player		# Erase player at current location
-		subi $a0, $a0, 4		# Get new address after key pressed
+		subi $a0, $a0, 8		# Get new address after key pressed
 		sw $a0, 0($a1)			# Store new address in memeory
 		jal draw_player			# Draw player at new location
 		j main
 		
 jump:		la $a1, playerState		# Get address of player location
+		li $a0, JUMP_HEIGHT		# Define jump height
+		sw $a0, 8($a1)			# Update jumping state of player
+		j main
+		
+jump_once:	la $s7, playerState		# Get address of player location
+		lw $a0, 0($s7)			# Load current location of player into $a0
 		lw $a0, 0($a1)			# Load current location of player into $a0
 		jal xy_address			# Compute current xy-coordinates of player
-		subi $s2, $s1, JUMP_HEIGHT
-		bltz $s2, jump_max
-jump_rep:	blt $s1, $s2, main
-jump_once:	la $a1, playerState		# Get address of player location
-		lw $a0, 0($a1)			# Load current location of player into $a0
+		add $s2, $s1, -1		# Compute new y-coordinate of player
+		bltz $s2, jump_max		# If reach top of screen, jump_max
+		
+		lw $a0, 0($s7)			# Load current location of player into $a0
 		jal erase_player		# Erase player at current location
 		subi $a0, $a0, SIZE_BY_BYTE	# Compute new location (one row above)
 		jal draw_player			# Draw player at new location
 		sw $a0, 0($a1)			# Store new location
-		jal xy_address			# Calculate xy-coordinates
-		li $v0, 32			# Sleep for a bit to see animation
-		li $a0, SLEEP_TIME
-		syscall
-		j jump_rep			# Repeat jumping once until reach height
-jump_max:	addi $s2, $zero, 1		# If player is near top, use a ceil for jump height
-		j jump_rep
+		
+		lw $a0, 8($s7)			# Load jumping state of player into $a0
+		addi $a0, $a0, -1		# Decrement jumping state (number of cells left to move up)
+		sw $a0, 8($s7)			# Store new jumping state
+		j keyboard
+
+jump_max:	sw $zero, 8($s7)		# If reach top of screen, stop jumping
+		j cj
 		
 fail:		jal erase_screen
 		# End program
