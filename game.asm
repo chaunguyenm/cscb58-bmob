@@ -153,8 +153,8 @@ setup:		jal erase_screen
 		jal draw_enemy			# Draw enemy
 		
 		# Draw player
-		li $a0, 21			# Store x coordinate
-		li $a1, 40			# Store y coordinate
+		li $a0, 5			# Store x coordinate
+		li $a1, 12			# Store y coordinate
 		jal bitmap_address		# Compute start address
 		la $s1, playerState		# Load the memory address that stores location of player
 		sw $s0, 0($s1)			# Store location of player in memory
@@ -172,7 +172,7 @@ main:		# Check for collision with enemies
 		lw $t0, 0($s7)			# $t0 stores number of enemies
 		addi $s7, $s7, 4		# $s7 stores address of enemy
 		
-ce_loop:	beqz $t0, keyboard		# When done checking all enemies, ce_fin
+ce_loop:	beqz $t0, cp			# When done checking all enemies, check platform
 
 		lw $a0, 0($s7)			# $a0 stores location of enemy
 		jal xy_address			# Calculate xy-coordinates for enemy
@@ -189,6 +189,7 @@ ce_loop:	beqz $t0, keyboard		# When done checking all enemies, ce_fin
 		addi $t6, $t4, 2
 		beq $t5, $t6, collision		# Check collision by x-coordinate left of player
 		j ce_skip			# If reaches here, no collision
+		
 collision:	la $a1, playerState		# Get address of playerState
 		lw $a0, 4($a1)			# Load current player health
 		addi $a0, $a0, -1		# Decrease health of player
@@ -199,14 +200,51 @@ collision:	la $a1, playerState		# Get address of playerState
 		li $v0, 4
 		la $a0, newline
 		syscall
-		
-		# Check if player is standing on platform
-		
-		
 		j keyboard		
 ce_skip:	addi $s7, $s7, 8		# $a0 stores address of next enemy
 		addi $t0, $t0, -1		# Decrement $t0 (number of enemies left to check)
 		j ce_loop
+		
+		# Check if player is standing on platform
+cp:		la $a1, playerState		# Get address of playerState
+		lw $a0, 0($a1)			# Load current location of player into $a0
+		jal xy_address			# Calculate xy-coordinates for player
+		add $t1, $s0, $zero		# $t1 stores x-coordinate of player
+		add $t2, $s1, $zero		# $t2 stores y-coordinate of player
+		
+		la $s7, platformState		# $s7 stores address of platformState
+		lw $t0, 0($s7)			# $t0 stores number of platforms
+		addi $s7, $s7, 4		# $s7 stores address of platform
+		
+cp_loop:	beqz $t0, falling		# If number of platforms left reaches 0, player is not standing on platform
+		lw $a0, 0($s7)			# $a0 stores location of platform
+		jal xy_address			# Calculate xy-coordinates for platform
+		lw $a0, 4($s7)			# $a0 stores size of platform
+		add $t3, $s0, $zero		# $t3 stores x-coordinate of platform
+		add $t4, $s1, $zero		# $t4 stores y-coordinate of platform
+		
+		addi $t5, $t2, 5		# $t5 stores bottom y-coordinate of player
+		bne $t5, $t4, cp_skip		# If player bottom != platform top, not standing on platform
+		blt $t1, $t3, cp_skip		# If player center < platform left, not standing on platform
+		add $t5, $t3, $a0
+		addi $t5, $t5, -1		# $t5 stores platform rightmost x-coordinate
+		ble $t1, $t5, keyboard		# If player center <= platform right, standing on platform
+ 
+cp_skip:	addi $s7, $s7, 8		# $a0 stores address of next platform
+		addi $t0, $t0, -1		# Decrement $t0 (number of platforms left to check)
+		j cp_loop	
+		
+falling:	la $a1, playerState		# Get address of player location
+		lw $a0, 0($a1)			# Load current location of player into $a0
+		lw $a2, 0($a1)			# Load current location of player into $a2
+		jal xy_address			# Compute current xy-coordinates of player
+		addi $s1, $s1, 1		# Compute new y-coordinate of player (fall below by 1)
+		bgt $s1, 64, fail		# If fall out of screen, fail
+		add $a0, $a2, $zero		# Restore current address
+		jal erase_player		# Erase player at current location
+		addi $a0, $a0, SIZE_BY_BYTE	# Get new address after key pressed
+		sw $a0, 0($a1)			# Store new address in memeory
+		jal draw_player			# Draw player at new location
 				
 keyboard:	li $t9, 0xffff0000 		# Store address of keystroke event
 		lw $t8, 0($t9)  		# Check for keystroke event
