@@ -64,7 +64,7 @@
 .eqv PLAYER_RIGHT 2
 .eqv BOMB_HEIGHT 3
 
-.eqv SLEEP_TIME 2000		# Sleeping time in miliseconds
+.eqv SLEEP_TIME 20		# Sleeping time in miliseconds
 .eqv JUMP_HEIGHT 20		# How high player can jump
 
 
@@ -153,7 +153,7 @@ setup:		jal erase_screen
 		jal draw_enemy			# Draw enemy
 		
 		# Draw player
-		li $a0, 5			# Store x coordinate
+		li $a0, 6			# Store x coordinate
 		li $a1, 12			# Store y coordinate
 		jal bitmap_address		# Compute start address
 		la $s1, playerState		# Load the memory address that stores location of player
@@ -186,7 +186,7 @@ ce_loop:	beqz $t0, cj			# When done checking all enemies, check jumping state
 		add $t6, $t3, $zero
 		beq $t5, $t6, collision		# Check collision by x-coordinate right of player
 		addi $t5, $t1, -3
-		addi $t6, $t4, 2
+		addi $t6, $t3, 2
 		beq $t5, $t6, collision		# Check collision by x-coordinate left of player
 		j ce_skip			# If reaches here, no collision
 		
@@ -231,16 +231,22 @@ cp_loop:	beqz $t0, falling		# If number of platforms left reaches 0, player is n
 		
 		addi $t5, $t2, 5		# $t5 stores bottom y-coordinate of player
 		bne $t5, $t4, cp_skip		# If player bottom != platform top, not standing on platform
-		blt $t1, $t3, cp_skip		# If player center < platform left, not standing on platform
-		add $t5, $t3, $a0
-		addi $t5, $t5, -1		# $t5 stores platform rightmost x-coordinate
-		ble $t1, $t5, keyboard		# If player center <= platform right, standing on platform
+		addi $t5, $t1, 2		# $t5 stores rightmost x-coordinate of player
+		blt $t5, $t3, cp_skip		# If player right < platform left, not standing on platform
+		add $t6, $t3, $a0
+		addi $t6, $t6, -1		# $t6 stores platform rightmost x-coordinate
+		addi $t5, $t1, -2		# $t5 stores player leftmost x-coordinate
+		ble $t5, $t6, keyboard		# If player center <= platform right, standing on platform
  
-cp_skip:	addi $s7, $s7, 8		# $a0 stores address of next platform
+cp_skip:	addi $s7, $s7, 8		# $s7 stores address of next platform
 		addi $t0, $t0, -1		# Decrement $t0 (number of platforms left to check)
+		la $a1, playerState		# Get address of playerState
+		sw $zero, 8($a1)		# Update state of player to standing on platform
 		j cp_loop	
 		
-falling:	la $a1, playerState		# Get address of player location
+falling:	la $a1, playerState		# Get address of playerState
+		li $a0, -1			# Define falling state
+		sw $a0, 8($a1)			# Update falling state of player
 		lw $a0, 0($a1)			# Load current location of player into $a0
 		lw $a2, 0($a1)			# Load current location of player into $a2
 		jal xy_address			# Compute current xy-coordinates of player
@@ -274,10 +280,15 @@ go_right:	la $a1, playerState		# Get address of player location
 		bge $s0, SIZE_BY_UNIT, main	# If next x coordinate goes beyond screen, do nothing
 		add $a0, $a2, $zero		# Restore current address
 		jal erase_player		# Erase player at current location
-		addi $a0, $a0, 8		# Get new address after key pressed
-		sw $a0, 0($a1)			# Store new address in memeory
+		lw $a2, 8($a1)			# Loading state of player
+		bnez $a2, bigger_rstep		# If player is jumping or falling, take a bigger step
+		addi $a0, $a0, 4		# Get new address after key pressed
+to_right:	sw $a0, 0($a1)			# Store new address in memeory
 		jal draw_player			# Draw player at new location
 		j main
+		
+bigger_rstep:	addi $a0, $a0, 12
+		j to_right
 		
 go_left:	la $a1, playerState		# Get address of player location
 		lw $a0, 0($a1)			# Load current location of player into $a0
@@ -287,24 +298,55 @@ go_left:	la $a1, playerState		# Get address of player location
 		blt $s0, 0, main		# If next x coordinate goes beyond screen, do nothing
 		add $a0, $a2, $zero		# Restore current address
 		jal erase_player		# Erase player at current location
-		subi $a0, $a0, 8		# Get new address after key pressed
-		sw $a0, 0($a1)			# Store new address in memeory
+		lw $a2, 8($a1)			# Loading state of player
+		bnez $a2, bigger_lstep		# If player is jumping or falling, take a bigger step
+		subi $a0, $a0, 4		# Get new address after key pressed
+to_left:	sw $a0, 0($a1)			# Store new address in memeory
 		jal draw_player			# Draw player at new location
 		j main
+		
+bigger_lstep:	subi $a0, $a0, 12
+		j to_left
 		
 jump:		la $a1, playerState		# Get address of player location
 		li $a0, JUMP_HEIGHT		# Define jump height
 		sw $a0, 8($a1)			# Update jumping state of player
 		j main
 		
-jump_once:	la $s7, playerState		# Get address of player location
+jump_once:	la $s7, playerState		# Get address of playerState
 		lw $a0, 0($s7)			# Load current location of player into $a0
-		lw $a0, 0($a1)			# Load current location of player into $a0
 		jal xy_address			# Compute current xy-coordinates of player
-		add $s2, $s1, -1		# Compute new y-coordinate of player
-		bltz $s2, jump_max		# If reach top of screen, jump_max
 		
-		lw $a0, 0($s7)			# Load current location of player into $a0
+		add $t1, $s0, $zero		# $t1 stores x-coordinate of player
+		add $t2, $s1, $zero		# $t2 stores y-coordinate of player
+		
+		beqz $t2, jump_max		# If reach top of screen, jump_max
+		
+		la $s6, platformState		# $s6 stores address of platformState
+		lw $t0, 0($s6)			# $t0 stores number of platforms
+		addi $s6, $s6, 4		# $s6 stores address of platform
+		
+rp_loop:	beqz $t0, jump_next		# If number of platforms left reaches 0, player does not touch platform
+		lw $a0, 0($s6)			# $a0 stores location of platform
+		jal xy_address			# Calculate xy-coordinates for platform
+		lw $t7, 4($s6)			# $t7 stores size of platform
+		add $t3, $s0, $zero		# $t3 stores x-coordinate of platform
+		add $t4, $s1, $zero		# $t4 stores y-coordinate of platform
+		
+		addi $t6, $t4, 2		# $t6 stores bottom y-coordinate of platform
+		bne $t2, $t6, rp_skip		# If player top != platform bottom, not touching platform
+		addi $t5, $t1, 2		# $t5 stores rightmost x-coordinate of player
+		blt $t5, $t3, rp_skip		# If player right < platform left, not touching platform
+		addi $t5, $t1, -2		# $t5 stores leftmost x-coordinate of player
+		add $t6, $t3, $t7
+		addi $t6, $t6, -1		# $t6 stores rightmost x-coordinate of platform
+		ble $t5, $t6, jump_max		# If player left <= platform right, touching platform
+
+rp_skip:	addi $s6, $s6, 8
+		addi $t0, $t0, -1
+		j rp_loop	
+	
+jump_next:	lw $a0, 0($s7)			# Load current location of player into $a0
 		jal erase_player		# Erase player at current location
 		subi $a0, $a0, SIZE_BY_BYTE	# Compute new location (one row above)
 		jal draw_player			# Draw player at new location
