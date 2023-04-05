@@ -59,6 +59,7 @@
 .eqv BOMB 0xed1c23
 .eqv FIRE_LINE 0xff8000
 .eqv FIRE_FILL 0xffc30e
+.eqv FIRE_OFF 0x546d8e
 .eqv WATER_FILL 0x00b7ef
 .eqv WATER_LINE 0x99d9ea
 .eqv PLATFORM 0x9c5a3c
@@ -75,9 +76,9 @@
 .eqv SIZE_BY_UNIT 64		# Size of bitmap display by buffer unit
 .eqv SIZE_BY_BYTE 256		# Size of one bitmap display row by byte
 
-.eqv SLEEP_TIME 40		# Sleeping time in miliseconds
+.eqv SLEEP_TIME 1000		# Sleeping time in miliseconds
 .eqv JUMP_HEIGHT 20		# How high player can jump
-.eqv DOUBLE_JUMP_HEIGHT 40
+.eqv HEALTH 500
 
 
 .data
@@ -98,7 +99,7 @@ bombLoc:		.word		0:3
 bombExplosion:		.word		0:3
 
 playerLoc:		.word		0:3		# Location, xVelocity, yVelocity
-playerHealth:		.word		1000
+playerHealth:		.word		HEALTH
 level:			.word		1
 
 newline:		.asciiz		"\n"
@@ -106,7 +107,7 @@ newline:		.asciiz		"\n"
 .text
 .globl main
 setup:		jal erase_screen
-		li $t9, 1000			# Reset playerHealth
+		li $t9, HEALTH			# Reset playerHealth
 		sw $t9, playerHealth
 		sw $zero, playerLoc + 4		# Reset xVelocity
 		sw $zero, playerLoc + 8		# Reset yVelocity
@@ -331,14 +332,16 @@ falling:	lw $a0, playerLoc + 8		# Check if player is set to jumping
 		
 update:		jal collision_screen
 		jal collision_enemy
-		lw $t1, collisionEnemy
+ce_check:	lw $t1, collisionEnemy
 		lw $t2, collisionEnemy + 4
 		lw $t3, collisionEnemy + 8
 		lw $t4, collisionEnemy + 12
 		or $t1, $t1, $t2
 		or $t1, $t1, $t3
 		or $t1, $t1, $t4
-		bne $t1, 1, sleep
+		bne $t1, 1, ce_n
+ce_y:		lw $a0, playerLoc
+		jal draw_player_off
 		lw $t5, playerHealth		# Decrease health
 		addi $t5, $t5, -1
 		blez $t5, fail			# If health < 0, fail
@@ -350,6 +353,9 @@ update:		jal collision_screen
 		la $a0, newline
 		syscall
 		jal collision_platform
+		j sleep
+ce_n:		lw $a0, playerLoc
+		jal draw_player
 	
 sleep:		li $v0, 32			# Sleep to see animation
 		li $a0, SLEEP_TIME
@@ -378,7 +384,7 @@ cs_top:		beqz $s1, cs_top_y
 cs_top_n:	sw $zero, collisionScreen + 8
 cs_bottom:	beq $s1, 59, cs_bottom_y
 cs_bottom_n:	sw $zero, collisionScreen + 12
-cs_left:	beqz $s0, cs_left_y
+cs_left:	beq $s0, 2, cs_left_y
 cs_left_n:	sw $zero, collisionScreen
 cs_right:	beq $s0, 61, cs_right_y
 cs_right_n:	sw $zero, collisionScreen + 4
@@ -394,7 +400,7 @@ cs_left_y:	li $a1, 1
 		sw $a1, collisionScreen
 		j cs_right
 cs_right_y:	li $a1, 1
-		sw $a1, collisionScreen + 8
+		sw $a1, collisionScreen + 4
 		
 # This function checks collision with enemies and updates collisionEnemy.
 # Arguments:	None
@@ -651,6 +657,32 @@ draw_player:	li $s0, FIRE_LINE		# Load line color for player
 		sw $s0, 1016($a0)
 		sw $s0, 1032($a0)
 		li $s0, FIRE_FILL		# Load fill color for player
+		sw $s0, 512($a0)
+		sw $s0, 768($a0)
+		sw $s0, 772($a0)
+		sw $s0, 1020($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1028($a0) 
+		jr $ra
+		
+# This function draws player losing health at memory address $a0.
+# Arguments:	Start address	$a0
+# Registers:	Color value	$s0
+# Returns:	None	
+draw_player_off: li $s0, FIRE_OFF		# Load line color for player
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 252($a0)
+		sw $s0, 256($a0)
+		sw $s0, 260($a0)
+		sw $s0, 508($a0)
+		sw $s0, 516($a0)
+		sw $s0, 520($a0)
+		sw $s0, 760($a0)
+		sw $s0, 764($a0)
+		sw $s0, 776($a0)
+		sw $s0, 1016($a0)
+		sw $s0, 1032($a0)
 		sw $s0, 512($a0)
 		sw $s0, 768($a0)
 		sw $s0, 772($a0)
