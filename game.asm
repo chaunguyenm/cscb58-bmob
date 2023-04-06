@@ -6,19 +6,20 @@
 # Student: Minh Chau Nguyen, 1007846422, nguy2855, chaum.nguyen@mail.utoronto.ca
 #
 # Bitmap Display Configuration:
-# - Unit width in pixels: 8 (update this as needed)
-# - Unit height in pixels: 8 (update this as needed)
-# - Display width in pixels: 512 (update this as needed)
-# - Display height in pixels: 512 (update this as needed)
+# - Unit width in pixels: 8 
+# - Unit height in pixels: 8 
+# - Display width in pixels: 512 
+# - Display height in pixels: 512 
 # - Base Address for Display: 0x10008000 ($gp)
 #
 # Which milestones have been reached in this submission?
 # (See the assignment handout for descriptions of the milestones)
-# - Milestone 1/2/3 (choose the one the applies)
+# - Milestone 1
+# - Milestone 2
 #
 # Which approved features have been implemented for milestone 3?
 # (See the assignment handout for the list of additional features)
-# 1. (fill in the feature, if any)
+# 1. Double jump
 # 2. (fill in the feature, if any)
 # 3. (fill in the feature, if any)
 # ... (add more if necessary)
@@ -76,14 +77,17 @@
 .eqv SIZE_BY_UNIT 64		# Size of bitmap display by buffer unit
 .eqv SIZE_BY_BYTE 256		# Size of one bitmap display row by byte
 
-.eqv SLEEP_TIME 1000		# Sleeping time in miliseconds
+.eqv SLEEP_TIME 40		# Sleeping time in miliseconds
 .eqv JUMP_HEIGHT 20		# How high player can jump
 .eqv HEALTH 500
+.eqv MAX_BOMB 3
+.eqv EXPLOSION_TIME 100
+.eqv EXPLOSION_RANGE 10
 
 
 .data
 collisionEnemy:		.word		0:4		# Left, Right, Top, Bottom
-collisionPlatform:	.word		0:4		# Left, Right, Top, Bottom
+collisionPlatform:	.word		0, 0, 0, 1	# Left, Right, Top, Bottom
 collisionBomb:		.word		0:4		# Left, Right, Top, Bottom
 collisionScreen:	.word		0:4		# Left, Right, Top, Bottom
 
@@ -96,7 +100,7 @@ enemyLoc:		.word		0:10
 
 numBomb:		.word		0
 bombLoc:		.word		0:3
-bombExplosion:		.word		0:3
+bombTime:		.word		100, 0, 0
 
 playerLoc:		.word		0:3		# Location, xVelocity, yVelocity
 playerHealth:		.word		HEALTH
@@ -122,7 +126,7 @@ setup:		jal erase_screen
 		sw $zero, collisionPlatform	# Reset collisionPlatform
 		sw $zero, collisionPlatform + 4
 		sw $zero, collisionPlatform + 8
-		sw $zero, collisionPlatform + 12
+		#sw $zero, collisionPlatform + 12
 		sw $zero, collisionBomb		# Reset collisionBomb
 		sw $zero, collisionBomb + 4
 		sw $zero, collisionBomb + 8
@@ -135,6 +139,8 @@ setup:		jal erase_screen
 setup_level1:	li $a0, 3			# Store number of platforms and enemies for this level
 		sw $a0, numPlatform
 		sw $a0, numEnemy
+		li $a0, 1
+		sw $a0, numBomb
 
 		# Draw first platform
  		li $a0, 0			# Compute start memory address
@@ -170,6 +176,7 @@ setup_level1:	li $a0, 3			# Store number of platforms and enemies for this level
 		li $a0, 45			# Compute start memory address
 		li $a1, 42
 		jal bitmap_address
+		sw $s0, bombLoc
 		add $a0, $s0, $zero		# Store start address
 		jal draw_bomb			# Draw bomb
 			
@@ -222,8 +229,9 @@ pressed:	lw $t8, 4($t9)			# Read what key is pressed
 		beq $t8, RIGHT, go_right
 		beq $t8, LEFT, go_left
 		beq $t8, JUMP, go_up
+		beq $t8, SHOOT, place_bomb
 		beq $t8, RESET, setup
-		j sleep
+		j jumping
 		
 go_left:	lw $a0, collisionEnemy		# Check if player is colliding with any object/screen on the left
 		lw $a1, collisionPlatform
@@ -243,6 +251,7 @@ go_left:	lw $a0, collisionEnemy		# Check if player is colliding with any object/
 		jal collision_screen		# Update collision
 		jal collision_enemy
 		jal collision_platform
+		jal collision_bomb
 		j jumping
 		
 go_right:	lw $a0, collisionEnemy + 4	# Check if player is colliding with any object/screen on the right
@@ -263,6 +272,7 @@ go_right:	lw $a0, collisionEnemy + 4	# Check if player is colliding with any obj
 		jal collision_screen		# Update collision
 		jal collision_enemy
 		jal collision_platform
+		jal collision_bomb
 		j jumping
 		
 go_up:		lw $a0, collisionEnemy + 8	# Check if player is colliding with any object/screen on the top
@@ -285,6 +295,32 @@ go_up:		lw $a0, collisionEnemy + 8	# Check if player is colliding with any objec
 double_jump:	bgt $a0, JUMP_HEIGHT, jumping	# If player is already double jumping, skip this action
 		addi $a0, $a0, JUMP_HEIGHT
 		sw $a0, playerLoc + 8		# If player is not double jumping, update yVelocity
+		j jumping
+		
+place_bomb:	jal bombable			# Check if player can place bomb
+		beqz $s0, jumping
+		lw $t0, numBomb
+		lw $a0, playerLoc
+		lw $t0, playerLoc + 4		# Load xVelocity
+		beq $t0, -1, bomb_left
+bomb_right:	addi $a0, $a0, 528
+		j bomb_fin
+bomb_left:	addi $a0, $a0, 496
+		j bomb_fin
+bomb_fin:	jal draw_bomb			# Draw bomb at location in $a0
+		lw $t0, numBomb			# Calculate offset from start of array from number of bombs
+		sll $t0, $t0, 2
+		la $t1, bombLoc			# Store location of new bomb into bombLoc
+		add $t1, $t0, $t1
+		sw $a0, 0($t1)
+		la $t1, bombTime		# Store time until explosion into bombTime
+		add $t1, $t0, $t1
+		li $a0, EXPLOSION_TIME
+		sw $a0, 0($t1)
+		lw $t0, numBomb			# Increase numBomb by 1
+		addi $t0, $t0, 1
+		sw $t0, numBomb
+		j jumping		
 		
 jumping:	lw $a0, playerLoc + 8		# Check if player is set to jumping
 		blez $a0, falling		# If player is not jumping, skip this action
@@ -307,6 +343,7 @@ jumping:	lw $a0, playerLoc + 8		# Check if player is set to jumping
 		jal collision_screen		# Update collision
 		jal collision_enemy
 		jal collision_platform
+		jal collision_bomb
 		j falling
 		
 falling:	lw $a0, playerLoc + 8		# Check if player is set to jumping
@@ -314,6 +351,7 @@ falling:	lw $a0, playerLoc + 8		# Check if player is set to jumping
 		jal collision_screen		# Update collision
 		jal collision_enemy
 		jal collision_platform
+		jal collision_bomb
 		lw $a0, collisionPlatform + 12 	# Check if player is standing on platform/enemy/bomb
 		lw $a1, collisionEnemy + 12
 		lw $a2, collisionBomb + 12
@@ -330,7 +368,11 @@ falling:	lw $a0, playerLoc + 8		# Check if player is set to jumping
 		sw $a0, playerLoc		
 		jal draw_player			# Draw player at new location
 		
-update:		jal collision_screen
+update:		jal explosion
+		jal boom
+		jal collision_screen
+		jal collision_platform
+		jal collision_bomb
 		jal collision_enemy
 ce_check:	lw $t1, collisionEnemy
 		lw $t2, collisionEnemy + 4
@@ -352,10 +394,13 @@ ce_y:		lw $a0, playerLoc
 		li $v0, 4
 		la $a0, newline
 		syscall
-		jal collision_platform
 		j sleep
 ce_n:		lw $a0, playerLoc
 		jal draw_player
+		j sleep
+		
+redraw:
+		
 	
 sleep:		li $v0, 32			# Sleep to see animation
 		li $a0, SLEEP_TIME
@@ -536,6 +581,220 @@ cp_skip:	addi $a1, $a1, 4		# $a1 stores address of next platform
 cp_end: 	lw $ra, 0($sp)			# Pop old $ra
 		addi $sp, $sp, 4
 		jr $ra
+		
+# This function checks collision with bombs and updates collisionBomb.
+# Arguments:	None
+# Registers:	$a0, $a1, $s0, $s1, $t0-$t6
+collision_bomb: sw $zero, collisionBomb		# Reset collisionBomb
+		sw $zero, collisionBomb + 4
+		sw $zero, collisionBomb + 8
+		sw $zero, collisionBomb + 12
+		addi $sp, $sp, -4		# Push old $ra to stack to call xy_address
+		sw $ra, 0($sp)
+		lw $a0, playerLoc		# Calculate xy-coordinates for player
+		jal xy_address
+		add $t1, $s0, $zero
+		add $t2, $s1, $zero
+		lw $t0, numBomb			# Load number of bombs to check
+		la $a1, bombLoc
+cb_loop:	beqz $t0, cb_end		
+		lw $a0, 0($a1)			# Calculate xy-coordinates for bomb
+		jal xy_address
+		add $t3, $s0, $zero
+		add $t4, $s1, $zero
+cb_bottom:	addi $t5, $t2, 5
+		bne $t5, $t4, cb_left		# player bottom + 1 != bomb top, no bottom collision
+		addi $t5, $t1, -2
+		addi $t6, $t3, 1
+		blt $t6, $t5, cb_left		# bomb right < player left, no bottom collision
+		addi $t5, $t1, 2
+		addi $t6, $t3, -1
+		bgt $t6, $t5, cb_left		# bomb left > player right, no bottom collision
+		li $t5, 1			# Update collision with bomb at bottom
+		sw $t5, collisionBomb + 12
+cb_left:	addi $t5, $t1, -3
+		addi $t6, $t3, 1
+		bne $t5, $t6, cb_right		# player left - 1 != bomb right, no left collision
+		addi $t5, $t2, 4
+		blt $t5, $t4, cb_right		# player bottom < bomb top, no left collision
+		addi $t6, $t4, 2
+		bgt $t2, $t6, cb_right		# player top > bomb bottom, no left collision
+		li $t5, 1			# Update collision with bomb on the left
+		sw $t5, collisionBomb
+cb_right:	addi $t5, $t1, 3
+		addi $t6, $t6, -1
+		bne $t5, $t6, cb_top		# player right + 1 != bomb left, no right collision
+		addi $t5, $t2, 4
+		blt $t5, $t4, cb_top		# player bottom < bomb top, no right collision
+		addi $t6, $t4, 2
+		bgt $t2, $t6, cb_top		# player top > bomb bottom, no right collision
+		li $t5, 1			# Update collision with bomb on the right
+		sw $t5, collisionBomb + 4
+cb_top:		addi $t5, $t2, -1
+		addi $t6, $t4, 2
+		bne $t5, $t6, cb_skip		# player top + 1 != bomb bottom, no top collision
+		addi $t5, $t1, -2
+		addi $t6, $t3, 1
+		blt $t6, $t5, cb_skip		# bomb right < player left, no top collision
+		addi $t5, $t1, 2
+		addi $t6, $t3, -1
+		bgt $t6, $t5, cb_skip		# bomb left > player right, no top collision
+		li $t5, 1			# Update collision with bomb at top
+		sw $t5, collisionBomb + 8
+		sw $zero, playerLoc + 8		# Update yVelocity
+cb_skip:	addi $a1, $a1, 4		# $a1 stores address of next bomb
+		addi $t0, $t0, -1		# Decrement $t0 (number of bombs left to check)
+		j cb_loop
+cb_end: 	lw $ra, 0($sp)			# Pop old $ra
+		addi $sp, $sp, 4
+		jr $ra
+
+# This function checks whether player can place bomb.
+bombable:	addi $sp, $sp, -4		# Push old $ra to stack to call xy_address
+		sw $ra, 0($sp)
+		lw $a0, collisionPlatform + 12	# If player is not standing on platform, cannot place bomb
+		bne $a0, 1, bombable_n
+		lw $a0, numBomb			# If player already have maximum active bombs, cannot place bomb
+		bge $a0, MAX_BOMB, bombable_n
+		lw $a0, playerLoc		# Compute xy-coordinates of player
+		jal xy_address
+		addi $t1, $s0, 0
+		addi $t2, $s1, 0
+		lw $t0, playerLoc + 4		# Load xVelocity
+		beq $a0, -1, bombable_left
+bombable_right:	bgt $t1, 60, bombable_n
+		lw $a0, playerLoc
+		addi $a0, $a0, 524
+		lw $t0, 0($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, 4($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, 8($a0)
+		bne $t0, ERASE, bombable_n
+		addi $a0, $a0, 256
+		lw $t0, 0($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, 4($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, 8($a0)
+		bne $t0, ERASE, bombable_n
+		addi $a0, $a0, 256
+		lw $t0, 0($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, 4($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, 8($a0)
+		bne $t0, ERASE, bombable_n
+		j bombable_y
+bombable_left:	blt $t1, 3, bombable_n
+		lw $a0, playerLoc
+		addi $a0, $a0, 500
+		lw $t0, 0($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, -4($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, -8($a0)
+		bne $t0, ERASE, bombable_n
+		addi $a0, $a0, 256
+		lw $t0, 0($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, -4($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, -8($a0)
+		bne $t0, ERASE, bombable_n
+		addi $a0, $a0, 256
+		lw $t0, 0($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, -4($a0)
+		bne $t0, ERASE, bombable_n
+		lw $t0, -8($a0)
+		bne $t0, ERASE, bombable_n
+		j bombable_y
+bombable_n:	li $s0, 0
+		j bombable_end
+bombable_y:	li $s0, 1
+		j bombable_end
+bombable_end:	lw $ra, 0($sp)
+		addi $sp, $sp, 4
+		jr $ra
+
+# This function counts down until explosion and updates bombTime.		
+explosion:	la $a3, bombTime
+		lw $t7, numBomb
+explosion_loop:	blez $t7, explosion_fin	# Decrease time until explosion
+		addi $t7, $t7, -1
+		add $a0, $t7, $zero
+		sll $t6, $t7, 2
+		add $t6, $t6, $a3
+		lw $t5, 0($t6)
+		addi $t5, $t5, -1
+		sw $t5, 0($t6)
+		j explosion_loop
+explosion_fin:	jr $ra
+
+# This function checks bombTime and explodes bomb if time is 0, kills nearby enemies/players.	
+boom:		addi $sp, $sp, -4
+		sw $ra, 0($sp)
+		la $a2, bombLoc
+		la $a3, bombTime
+		lw $t7, numBomb
+boom_check:	blez $t7, boom_fin
+		lw $t6, 0($a3)
+		blez $t6, boom_draw
+		addi $t7, $t7, -1
+		addi $a2, $a2, 4
+		addi $a3, $a3, 4
+		j boom_check
+
+boom_draw:	lw $s0, 0($a2)
+		lw $s1, 0($a2)
+		li $s7, 1
+		li $s6, BOMB
+boom_draw_loop:	bgt $s7, EXPLOSION_RANGE, boom_sleep
+		addi $s0, $s0, -4
+		addi $s1, $s1, 4
+		sw $s6, 0($s0)
+		sw $s6, 0($s1)
+		sw $s6, 256($s0)
+		sw $s6, 256($s1)
+		sw $s6, 512($s0)
+		sw $s6, 512($s1)
+		addi $s7, $s7, 1
+		j boom_draw_loop
+boom_sleep:	li $v0, 32
+		li $a0, 500
+		syscall
+		lw $t6, numBomb
+		addi $t7, $t7, -1
+		sub $t7, $t6, $t7
+		addi $t6, $t6, -1
+		sw $t6, numBomb
+boom_remove_loop: blez $t7, boom_erase
+		lw $s6, 4($a2)
+		sw $s6, 0($a2)
+		lw $s6, 4($a3)
+		sw $s6, 0($a3)
+		addi $a2, $a2, 4
+		addi $a3, $a3, 4
+		addi $t7, $t7, -1
+		j boom_remove_loop
+		
+boom_erase:	li $s6, ERASE
+boom_erase_loop: bgt $s0, $s1, boom_fin
+		sw $s6, 0($s0)
+		sw $s6, 0($s1)
+		sw $s6, 256($s0)
+		sw $s6, 256($s1)
+		sw $s6, 512($s0)
+		sw $s6, 512($s1)
+		addi $s0, $s0, 4
+		addi $s1, $s1, -4
+		j boom_erase_loop
+
+boom_fin:	lw $ra, 0($sp)
+		addi $sp, $sp, 4
+		jr $ra
+		
 						
 # This function clears the screen.
 # Arguments:	None
@@ -576,6 +835,22 @@ erase_player:	li $s0, ERASE
 		sw $s0, 1020($a0)
 		sw $s0, 1024($a0)
 		sw $s0, 1028($a0) 
+		jr $ra
+		
+# This function erases enemy at memory address $a0.
+# Arguments:	Start address	$a0
+# Registers:	Color value	$s0
+# Returns:	None	
+erase_enemy:	li $s0, ERASE
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 8($a0)
+		sw $s0, 260($a0)
+		sw $s0, 264($a0)
+		sw $s0, 520($a0)
+		sw $s0, 256($a0)
+		sw $s0, 512($a0)
+		sw $s0, 516($a0)
 		jr $ra
 
 # This function computes the memory address of the given (x, y) location.	
