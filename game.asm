@@ -72,6 +72,9 @@
 .eqv MENU_TEXT 0x990030
 .eqv HEALTH_BAR_FULL 0x990030
 .eqv HEALTH_BAR_EMPTY 0xb4b4b4
+.eqv FAIL_TEXT 0xed1c23
+.eqv FAIL_SHADOW 0x990030
+
 
 # ASCII values for input keys
 .eqv LEFT 97
@@ -425,6 +428,7 @@ sleep:		li $v0, 32			# Sleep to see animation
 		j main				# Repeat main
 		
 fail:		jal erase_screen
+		jal game_over
 		# End program
 		li $v0, 10
 		syscall
@@ -1131,7 +1135,8 @@ level3:		li $s0, MENU_TEXT
 		sw $s0, 1028($a0)
 		sw $s0, 1032($a0)
 		jr $ra
-		
+
+# This function erases the health bar from end to start.	
 decrease_health_bar: li $a0, HEALTH_BAR_END
 		lw $s0, playerHealth
 		li $s1, 10
@@ -1151,3 +1156,216 @@ dhb_loop:	beqz $s0, dhb_fin
 		addi $a0, $a0, -4
 		j dhb_loop
 dhb_fin:	jr $ra
+
+# This function draws fail screen
+game_over:	li $a0, 0x1000984C
+		li $s0, FAIL_TEXT
+		sw $s0, 4($a0)			# G
+		sw $s0, 8($a0)
+		sw $s0, 256($a0)
+		sw $s0, 268($a0)
+		sw $s0, 512($a0)
+		sw $s0, 768($a0)
+		sw $s0, 776($a0)
+		sw $s0, 780($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1288($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 12($a0)
+		sw $s0, 260($a0)
+		sw $s0, 272($a0)
+		sw $s0, 516($a0)
+		sw $s0, 772($a0)
+		sw $s0, 784($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1040($a0)
+		sw $s0, 1292($a0)
+		addi $a0, $a0, 24		# A
+		li $s0, FAIL_TEXT
+		sw $s0, 8($a0)
+		sw $s0, 12($a0)
+		sw $s0, 260($a0)
+		sw $s0, 268($a0)
+		sw $s0, 512($a0)
+		sw $s0, 524($a0)
+		sw $s0, 768($a0)
+		sw $s0, 780($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1032($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1280($a0)
+		sw $s0, 1292($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 16($a0)
+		sw $s0, 264($a0)
+		sw $s0, 272($a0)
+		sw $s0, 516($a0)
+		sw $s0, 528($a0)
+		sw $s0, 772($a0)
+		sw $s0, 784($a0)
+		sw $s0, 1040($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1296($a0)
+		addi $a0, $a0, 24		# M
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 24($a0)
+		sw $s0, 256($a0)
+		sw $s0, 260($a0)
+		sw $s0, 276($a0)
+		sw $s0, 280($a0)
+		sw $s0, 512($a0)
+		sw $s0, 520($a0)
+		sw $s0, 528($a0)
+		sw $s0, 536($a0)
+		sw $s0, 768($a0)
+		sw $s0, 780($a0)
+		sw $s0, 792($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1048($a0)
+		sw $s0, 1280($a0)
+		sw $s0, 1304($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 4($a0)
+		sw $s0, 28($a0)
+		sw $s0, 264($a0)
+		sw $s0, 284($a0)
+		sw $s0, 516($a0)
+		sw $s0, 524($a0)
+		sw $s0, 532($a0)
+		sw $s0, 540($a0)
+		sw $s0, 772($a0)
+		sw $s0, 784($a0)
+		sw $s0, 796($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1052($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1308($a0)
+		addi $a0, $a0, 36		# E
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 8($a0)
+		sw $s0, 12($a0)
+		sw $s0, 256($a0)
+		sw $s0, 512($a0)
+		sw $s0, 516($a0)
+		sw $s0, 520($a0)
+		sw $s0, 768($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1280($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1288($a0)
+		sw $s0, 1292($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 16($a0)
+		sw $s0, 260($a0)
+		sw $s0, 524($a0)
+		sw $s0, 772($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1296($a0)
+		addi $a0, $a0, 1712		# O
+		li $s0, FAIL_TEXT
+		sw $s0, 4($a0)
+		sw $s0, 8($a0)
+		sw $s0, 256($a0)
+		sw $s0, 268($a0)
+		sw $s0, 512($a0)
+		sw $s0, 524($a0)
+		sw $s0, 768($a0)
+		sw $s0, 780($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1288($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 12($a0)
+		sw $s0, 260($a0)
+		sw $s0, 272($a0)
+		sw $s0, 516($a0)
+		sw $s0, 528($a0)
+		sw $s0, 772($a0)
+		sw $s0, 784($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1040($a0)
+		sw $s0, 1292($a0)
+		addi $a0, $a0, 24		# V
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 16($a0)
+		sw $s0, 256($a0)
+		sw $s0, 272($a0)
+		sw $s0, 512($a0)
+		sw $s0, 528($a0)
+		sw $s0, 768($a0)
+		sw $s0, 784($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1288($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 4($a0)
+		sw $s0, 20($a0)
+		sw $s0, 260($a0)
+		sw $s0, 276($a0)
+		sw $s0, 516($a0)
+		sw $s0, 532($a0)
+		sw $s0, 772($a0)
+		sw $s0, 788($a0)
+		sw $s0, 1032($a0)
+		sw $s0, 1040($a0)
+		sw $s0, 1292($a0)
+		addi $a0, $a0, 28		# E
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 8($a0)
+		sw $s0, 12($a0)
+		sw $s0, 256($a0)
+		sw $s0, 512($a0)
+		sw $s0, 516($a0)
+		sw $s0, 520($a0)
+		sw $s0, 768($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1280($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1288($a0)
+		sw $s0, 1292($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 16($a0)
+		sw $s0, 260($a0)
+		sw $s0, 524($a0)
+		sw $s0, 772($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1296($a0)
+		addi $a0, $a0, 24		# R
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 8($a0)
+		sw $s0, 256($a0)
+		sw $s0, 268($a0)
+		sw $s0, 512($a0)
+		sw $s0, 524($a0)
+		sw $s0, 768($a0)
+		sw $s0, 772($a0)
+		sw $s0, 776($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1032($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1280($a0)
+		sw $s0, 1292($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 12($a0)
+		sw $s0, 260($a0)
+		sw $s0, 272($a0)
+		sw $s0, 516($a0)
+		sw $s0, 528($a0)
+		sw $s0, 780($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1040($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1296($a0)
+		jr $ra
