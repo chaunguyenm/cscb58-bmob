@@ -54,6 +54,9 @@
 
 # Important addresses
 .eqv BASE_ADDRESS 0x10008000	# Location (0, 0) on bitmap display
+.eqv HEALTH_BAR_START 0x1000820C
+.eqv HEALTH_BAR_END 0x100082D0
+.eqv LEVEL_ADDRESS 0x100081E8
 .eqv KEYBOARD 0xffff0000	# Address of boolean key pressed
 
 # RGB values
@@ -64,7 +67,11 @@
 .eqv WATER_FILL 0x00b7ef
 .eqv WATER_LINE 0x99d9ea
 .eqv PLATFORM 0x9c5a3c
-.eqv ERASE 0x000000
+.eqv ERASE 0xf5e59c
+.eqv MENU_BACKGROUND 0xe5aa7a
+.eqv MENU_TEXT 0x990030
+.eqv HEALTH_BAR_FULL 0x990030
+.eqv HEALTH_BAR_EMPTY 0xb4b4b4
 
 # ASCII values for input keys
 .eqv LEFT 97
@@ -81,7 +88,7 @@
 .eqv JUMP_HEIGHT 20		# How high player can jump
 .eqv HEALTH 500
 .eqv MAX_BOMB 3
-.eqv EXPLOSION_TIME 100
+.eqv EXPLOSION_TIME 1
 .eqv EXPLOSION_RANGE 10
 
 
@@ -94,13 +101,16 @@ collisionScreen:	.word		0:4		# Left, Right, Top, Bottom
 numPlatform:		.word		0
 platformLoc:		.word		0:10
 platformSize:		.word		0:10
+platformQueue:		.word		0:10
 
 numEnemy:		.word		0
 enemyLoc:		.word		0:10
+enemyQueue:		.word		0:10
 
 numBomb:		.word		0
 bombLoc:		.word		0:3
-bombTime:		.word		100, 0, 0
+bombTime:		.word		1, 0, 0
+bombQueue:		.word		0:3
 
 playerLoc:		.word		0:3		# Location, xVelocity, yVelocity
 playerHealth:		.word		HEALTH
@@ -141,6 +151,11 @@ setup_level1:	li $a0, 3			# Store number of platforms and enemies for this level
 		sw $a0, numEnemy
 		li $a0, 1
 		sw $a0, numBomb
+		
+		# Draw health bar
+		jal draw_menu
+		jal draw_health_bar
+		jal draw_level
 
 		# Draw first platform
  		li $a0, 0			# Compute start memory address
@@ -214,10 +229,12 @@ setup_level1:	li $a0, 3			# Store number of platforms and enemies for this level
 		
 		j main
 		
-setup_level2:	li $v0, 10
+setup_level2:	jal draw_level
+		li $v0, 10
 		syscall
 		
-setup_level3:	li $v0, 10
+setup_level3:	jal draw_level
+		li $v0, 10
 		syscall
 		
 main:		li $t9, KEYBOARD 		# Store address of keystroke event
@@ -369,7 +386,10 @@ falling:	lw $a0, playerLoc + 8		# Check if player is set to jumping
 		jal draw_player			# Draw player at new location
 		
 update:		jal explosion
+		jal kill
 		jal boom
+		lw $t0, playerHealth
+		blez $t0, fail
 		jal collision_screen
 		jal collision_platform
 		jal collision_bomb
@@ -394,13 +414,11 @@ ce_y:		lw $a0, playerLoc
 		li $v0, 4
 		la $a0, newline
 		syscall
+		jal decrease_health_bar
 		j sleep
 ce_n:		lw $a0, playerLoc
 		jal draw_player
-		j sleep
-		
-redraw:
-		
+		j sleep		
 	
 sleep:		li $v0, 32			# Sleep to see animation
 		li $a0, SLEEP_TIME
@@ -732,7 +750,7 @@ explosion_loop:	blez $t7, explosion_fin	# Decrease time until explosion
 		j explosion_loop
 explosion_fin:	jr $ra
 
-# This function checks bombTime and explodes bomb if time is 0, kills nearby enemies/players.	
+# This function checks bombTime and explodes bomb if time is 0.	
 boom:		addi $sp, $sp, -4
 		sw $ra, 0($sp)
 		la $a2, bombLoc
@@ -744,8 +762,7 @@ boom_check:	blez $t7, boom_fin
 		addi $t7, $t7, -1
 		addi $a2, $a2, 4
 		addi $a3, $a3, 4
-		j boom_check
-
+		j boom_check		
 boom_draw:	lw $s0, 0($a2)
 		lw $s1, 0($a2)
 		li $s7, 1
@@ -778,7 +795,6 @@ boom_remove_loop: blez $t7, boom_erase
 		addi $a3, $a3, 4
 		addi $t7, $t7, -1
 		j boom_remove_loop
-		
 boom_erase:	li $s6, ERASE
 boom_erase_loop: bgt $s0, $s1, boom_fin
 		sw $s6, 0($s0)
@@ -794,7 +810,70 @@ boom_erase_loop: bgt $s0, $s1, boom_fin
 boom_fin:	lw $ra, 0($sp)
 		addi $sp, $sp, 4
 		jr $ra
+
+# This function checks players, enemies, bombs in close proximity of an exploding bomb and updates,	
+kill:		addi $sp, $sp, -4
+		sw $ra, 0($sp)
+		la $a2, bombLoc
+		la $a3, bombTime
+		lw $t7, numBomb
+kill_check:	blez $t7, kill_fin
+		lw $t0, 0($a3)
+		blez $t0, kill_player
+kill_check_next: addi $t7, $t7, -1
+		addi $a2, $a2, 4
+		addi $a3, $a3, 4
+		j kill_check
+kill_player:	lw $a0, playerLoc
+		jal xy_address
+		add $t1, $s0, $zero
+		add $t2, $s1, $zero
+		lw $a0, 0($a2)
+		jal xy_address
+		add $t3, $s0, $zero
+		add $t4, $s1, $zero
+		addi $t5, $t2, 2
+		bne $t5, $t4, kill_check_next	# player and bomb not on the same y-coordinate, not kill player
+		addi $t5, $t1, -2
+		addi $t6, $t3, EXPLOSION_RANGE
+		bge $t5, $t6, kill_check_next	# player left >= explosion right, not kill player (allow a bit contact)
+		addi $t5, $t1, 2
+		subi $t6, $t3, EXPLOSION_RANGE
+		ble $t5, $t6, kill_check_next	# player right <= explosion left, not kill player (allow a bit contact)	
+		sw $zero, playerHealth		# player in explosion range, kill player
+kill_enemy:	lw $s7, numEnemy
+		la $s2, enemyLoc
+		lw $a0, 0($a2)
+		jal xy_address
+		add $t1, $s0, $zero
+		add $t2, $s1, $zero
+kill_enemy_loop: blez $s7, kill_enemy_remove
+		lw $a0, 0($s2)
+		jal xy_address
+		add $t3, $s0, $zero
+		add $t4, $s1, $zero
+		bne $t2, $t4, kill_enemy_skip	# enemy and bomb not on the same y-coordinate, not kill enemy
+		addi $t5, $t1, EXPLOSION_RANGE
+		bge $t3, $t5, kill_enemy_skip	# enemy left >= bomb right, not kill enemy
+		subi $t5, $t1, EXPLOSION_RANGE
+		addi $t6, $t3, 2
+		ble $t6, $t5, kill_enemy_skip	# enemy right <= bomb left, not kill enemy
+		li $t5, -1
+		sw $t5, 0($s2)
+kill_enemy_skip: addi $s7, $s7, -1
+		addi $s2, $s2, 4
+		j kill_enemy_loop
+kill_enemy_remove: lw $s7, numEnemy
+		la $s2, enemyLoc
+		li $t5, 1
+		lw $a0, 0($s2)
+		beq $a0, -1, kill_enemy
 		
+		
+		
+kill_fin:	lw $ra, 0($sp)
+		addi $sp, $sp, 4
+		jr $ra
 						
 # This function clears the screen.
 # Arguments:	None
@@ -867,10 +946,10 @@ bitmap_address:	li $s0, SIZE_BY_UNIT
 		jr $ra
 
 # This function computes the (x, y) location given the memory address.	
-# Arguments:	x coordinate	$a0
-#		y coordinate	$a1
+# Arguments:	memory address	$a0
 # Registers:	tmp, return	$s0
-# Returns:	Start address	$s0	
+# Returns:	x-coordinate	$s0
+#		y-coordinate	$s1	
 xy_address:	subi $a0, $a0, BASE_ADDRESS	# Get offset from (0, 0)
 		sra $a0, $a0, 2			# Divide by 4 to get (y*width + x)
 		li $s0, SIZE_BY_UNIT		
@@ -878,6 +957,9 @@ xy_address:	subi $a0, $a0, BASE_ADDRESS	# Get offset from (0, 0)
 		mfhi $s0			# Remainder is x
 		mflo $s1			# Quotient is y
 		jr $ra
+
+# This functions takes the array address at $a0 and its initial length at $a1 and removes empty entries.
+rearrange:	
 
 # This function draws a platform of size $a1 starting from memory address $a0.	
 # Arguments:	Start address	$a0
@@ -978,3 +1060,94 @@ draw_bomb:	li $s0, BOMB			# Load color for bomb
 		sw $s0, 508($a0)
 		sw $s0, 512($a0)
 		jr $ra
+		
+# This function draws a health bar on top left of the screen.
+draw_health_bar: lw $s1, playerHealth
+		li $s0, 10
+		div $s1, $s0
+		mflo $s1
+		li $s0, HEALTH_BAR_FULL
+		li $a0, HEALTH_BAR_START
+hb_loop:	blez $s1, hb_fin
+		sw $s0, 0($a0)
+		sw $s0, 256($a0)
+		sw $s0, 512($a0)
+		addi $s1, $s1, -1
+		add $a0, $a0, 4
+		j hb_loop
+hb_fin:		jr $ra
+		
+# This function draws the menu bar
+draw_menu:	li $s0, MENU_BACKGROUND
+		li $a0, BASE_ADDRESS
+		li $s1, 64
+menu_loop:	blez $s1, menu_fin
+		sw $s0, 0($a0)
+		sw $s0, 256($a0)
+		sw $s0, 512($a0)
+		sw $s0, 768($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1280($a0)
+		sw $s0, 1536($a0)
+		addi $s1, $s1, -1
+		add $a0, $a0, 4
+		j menu_loop
+menu_fin:	jr $ra
+
+# This function draws level number.
+draw_level:	li $a0, LEVEL_ADDRESS
+		lw $s0, level
+		beq $s0, 2, level2
+		beq $s0, 3, level3
+		li $s0, MENU_TEXT
+		sw $s0, 4($a0)
+		sw $s0, 256($a0)
+		sw $s0, 260($a0)
+		sw $s0, 516($a0)
+		sw $s0, 772($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1032($a0)
+		jr $ra
+level2:		li $s0, MENU_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 264($a0)
+		sw $s0, 516($a0)
+		sw $s0, 768($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1032($a0)
+		jr $ra
+level3:		li $s0, MENU_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 8($a0)
+		sw $s0, 264($a0)
+		sw $s0, 516($a0)
+		sw $s0, 520($a0)
+		sw $s0, 776($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1032($a0)
+		jr $ra
+		
+decrease_health_bar: li $a0, HEALTH_BAR_END
+		lw $s0, playerHealth
+		li $s1, 10
+		div $s0, $s1
+		li $s1, 50
+		mflo $s0
+		sub $s0, $s1, $s0
+		mfhi $s1
+		beqz $s1, dhb_loop
+		addi $s0, $s0, -1
+dhb_loop:	beqz $s0, dhb_fin
+		li $s1, HEALTH_BAR_EMPTY
+		sw $s1, 0($a0)
+		sw $s1, 256($a0)
+		sw $s1, 512($a0)
+		addi $s0, $s0, -1
+		addi $a0, $a0, -4
+		j dhb_loop
+dhb_fin:	jr $ra
