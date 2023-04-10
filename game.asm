@@ -96,7 +96,7 @@
 .eqv JUMP_HEIGHT 20		# How high player can jump
 .eqv HEALTH 500
 .eqv MAX_BOMB 3
-.eqv EXPLOSION_TIME 1
+.eqv EXPLOSION_TIME 40
 .eqv EXPLOSION_RANGE 10
 
 
@@ -128,8 +128,8 @@ newline:		.asciiz		"\n"
 
 .text
 .globl main
-setup:		jal erase_screen
-		jal you_win
+setup:		#jal erase_screen
+		#jal you_win
 		jal erase_screen
 		li $t9, HEALTH			# Reset playerHealth
 		sw $t9, playerHealth
@@ -198,7 +198,7 @@ setup_level1:	li $a0, 3			# Store number of platforms and enemies for this level
 		jal draw_platform		# Draw platform
 		
 		# Draw bomb
-		li $a0, 45			# Compute start memory address
+		li $a0, 49			# Compute start memory address
 		li $a1, 42
 		jal bitmap_address
 		sw $s0, bombLoc
@@ -396,10 +396,18 @@ falling:	lw $a0, playerLoc + 8		# Check if player is set to jumping
 		jal draw_player			# Draw player at new location
 		
 update:		jal explosion
-		jal kill
-		jal boom
+		jal kill_bomb
+		jal kill_player
+		jal kill_enemy
+		jal redraw_active_bomb
 		lw $t0, playerHealth
 		blez $t0, fail
+		jal redraw_inactive_bomb
+		lw $a0, playerLoc
+		jal draw_player
+		jal redraw_enemy
+		lw $a0, numEnemy
+		beqz $a0, level_up
 		jal collision_screen
 		jal collision_platform
 		jal collision_bomb
@@ -439,6 +447,16 @@ fail:		jal erase_screen
 		# End program
 		li $v0, 10
 		syscall
+		
+level_up:	lw $a0, level
+		beq $a0, 1, win
+		addi $a0, $a0, 1
+		sw $a0, level
+		j setup
+win:		jal erase_screen
+		jal you_win
+		li $v0, 10
+		syscall
 	
 # This function checks collision with the screen and update collisionScreen.
 # Arguments:	None
@@ -454,7 +472,7 @@ collision_screen: sw $zero, collisionScreen	# Reset collisionScreen
 		jal xy_address
 		lw $ra, 0($sp)
 		addi $sp, $sp, 4
-cs_top:		beqz $s1, cs_top_y
+cs_top:		beq $s1, 7, cs_top_y
 cs_top_n:	sw $zero, collisionScreen + 8
 cs_bottom:	beq $s1, 59, cs_bottom_y
 cs_bottom_n:	sw $zero, collisionScreen + 12
@@ -749,36 +767,167 @@ bombable_end:	lw $ra, 0($sp)
 
 # This function counts down until explosion and updates bombTime.		
 explosion:	la $a3, bombTime
+		la $a2, bombQueue
 		lw $t7, numBomb
 explosion_loop:	blez $t7, explosion_fin	# Decrease time until explosion
-		addi $t7, $t7, -1
-		add $a0, $t7, $zero
-		sll $t6, $t7, 2
-		add $t6, $t6, $a3
-		lw $t5, 0($t6)
+		lw $t5, 0($a3)
 		addi $t5, $t5, -1
-		sw $t5, 0($t6)
+		sw $t5, 0($a3)
+		blez $t5, explosion_y
+		addi $t7, $t7, -1
+		addi $a2, $a2, 4
+		addi $a3, $a3, 4
+explosion_n:	sw $zero, 0($a2)
 		j explosion_loop
 explosion_fin:	jr $ra
+explosion_y:	li $t5, 1
+		sw $t5, 0($a2)
+		addi $t7, $t7, -1
+		addi $a2, $a2, 4
+		addi $a3, $a3, 4
+		j explosion_loop
 
-# This function checks bombTime and explodes bomb if time is 0.	
-boom:		addi $sp, $sp, -4
+# This function kills player if in close proximity with an exploding bomb.	
+kill_player:	addi $sp, $sp, -4
 		sw $ra, 0($sp)
 		la $a2, bombLoc
 		la $a3, bombTime
 		lw $t7, numBomb
-boom_check:	blez $t7, boom_fin
-		lw $t6, 0($a3)
-		blez $t6, boom_draw
-		addi $t7, $t7, -1
+kp_check_bomb: 	blez $t7, kp_fin
+		lw $t0, 0($a3)
+		blez $t0, kp_check_player
+kp_check_bomb_next: addi $t7, $t7, -1
 		addi $a2, $a2, 4
 		addi $a3, $a3, 4
-		j boom_check		
-boom_draw:	lw $s0, 0($a2)
+		j kp_check_bomb
+kp_check_player: lw $a0, playerLoc
+		jal xy_address
+		add $t1, $s0, $zero
+		add $t2, $s1, $zero
+		lw $a0, 0($a2)
+		jal xy_address
+		add $t3, $s0, $zero
+		add $t4, $s1, $zero
+		addi $t5, $t2, 2
+		bne $t5, $t4, kp_check_bomb_next	# player and bomb not on the same y-coordinate, not kill player
+		addi $t5, $t1, -2
+		addi $t6, $t3, EXPLOSION_RANGE
+		bge $t5, $t6, kp_check_bomb_next	# player left >= explosion right, not kill player (allow a bit contact)
+		addi $t5, $t1, 2
+		subi $t6, $t3, EXPLOSION_RANGE
+		ble $t5, $t6, kp_check_bomb_next	# player right <= explosion left, not kill player (allow a bit contact)	
+		sw $zero, playerHealth			# player in explosion range, kill player
+kp_fin:		lw $ra, 0($sp)
+		addi $sp, $sp, 4
+		jr $ra
+		
+# This function kills enemies and updates enemyQueue if in close proximity with an exploding bomb.
+kill_enemy:	addi $sp, $sp, -4
+		sw $ra, 0($sp)
+		la $a2, bombLoc
+		la $a3, bombQueue
+		lw $t7, numBomb
+ke_check_bomb: 	blez $t7, ke_fin
+		lw $t0, 0($a3)
+		beq $t0, 1, ke_check_enemy
+ke_check_bomb_next: addi $t7, $t7, -1
+		addi $a2, $a2, 4
+		addi $a3, $a3, 4
+		j ke_check_bomb
+ke_check_enemy:	lw $a0, 0($a2)
+		jal xy_address
+		add $t1, $s0, $zero
+		add $t2, $s1, $zero
+		lw $t0, numEnemy
+		la $t8, enemyLoc
+		la $t9, enemyQueue
+ke_check_enemy_loop: beqz $t0, ke_check_bomb_next
+		lw $a0, 0($t8)
+		jal xy_address
+		add $t3, $s0, $zero
+		add $t4, $s1, $zero
+		addi $t5, $t2, 2
+		addi $t6, $t4, 2
+		bne $t5, $t6, ke_check_enemy_n
+		addi $t5, $t1, EXPLOSION_RANGE
+		bgt $t3, $t5, ke_check_enemy_n
+		subi $t5, $t1, EXPLOSION_RANGE
+		addi $t6, $t3, 2
+		blt $t6, $t5, ke_check_enemy_n
+		li $t5, -1
+		sw $t5, 0($t9)
+ke_check_enemy_next: addi $t8, $t8, 4
+		addi $t0, $t0, -1
+		addi $t9, $t9, 4
+		j ke_check_enemy_loop
+ke_fin:		lw $ra, 0($sp)
+		addi $sp, $sp 4
+		jr $ra
+ke_check_enemy_n: sw $zero, 0($t9)
+		j ke_check_enemy_next
+		
+# This function aggregates effect of bomb if in close proximity and updates bombQueue.
+kill_bomb:	addi $sp, $sp, -4
+		sw $ra, 0($sp)
+		la $a2, bombLoc
+		la $a3, bombQueue
+		lw $t7, numBomb
+kb_check_bomb: 	blez $t7, kb_fin
+		lw $t0, 0($a3)
+		beq $t0, 1, kb_check_other
+kb_check_bomb_next: addi $t7, $t7, -1
+		addi $a2, $a2, 4
+		addi $a3, $a3, 4
+		j kb_check_bomb	
+kb_check_other: lw $a0, 0($a2)
+		jal xy_address
+		add $t1, $s0, $zero
+		add $t2, $s1, $zero
+		lw $t0, numBomb
+		la $t8, bombLoc
+		la $t9, bombQueue
+kb_check_other_loop: beqz $t0, kb_check_bomb_next
+		lw $a0, 0($t8)
+		jal xy_address
+		add $t3, $s0, $zero
+		add $t4, $s1, $zero
+		bne $t2, $t4, kb_check_other_next
+		addi $t5, $t1, EXPLOSION_RANGE
+		addi $t6, $t3, -1
+		bgt $t6, $t5, kb_check_other_next
+		subi $t5, $t1, EXPLOSION_RANGE
+		addi $t6, $t3, 1
+		blt $t6, $t5, kb_check_other_next
+		li $t5, 1
+		sw $t5, 0($t9)
+kb_check_other_next: addi $t8, $t8, 4
+		addi $t0, $t0, -1
+		addi $t9, $t9, 4
+		j kb_check_other_loop
+kb_fin:		lw $ra, 0($sp)
+		addi $sp, $sp 4
+		jr $ra
+		
+# This function draws explosion and updates bombQueue after done.	
+redraw_active_bomb: addi $sp, $sp, -4
+		sw $ra, 0($sp)
+		la $a2, bombLoc
+		la $a3, bombQueue
+		lw $t7, numBomb
+rab_loop:	blez $t7, rab_fin
+		lw $t0, 0($a3)
+		beq $t0, 1, rab_on
+rab_next:	addi $t7, $t7, -1
+		addi $a2, $a2, 4
+		addi $a3, $a3, 4
+		j rab_loop
+rab_on:		li $s7, -1
+		sw $s7, 0($a3)
+		lw $s0, 0($a2)
 		lw $s1, 0($a2)
 		li $s7, 1
 		li $s6, BOMB
-boom_draw_loop:	bgt $s7, EXPLOSION_RANGE, boom_sleep
+rab_on_loop:	bgt $s7, EXPLOSION_RANGE, rab_next
 		addi $s0, $s0, -4
 		addi $s1, $s1, 4
 		sw $s6, 0($s0)
@@ -788,102 +937,115 @@ boom_draw_loop:	bgt $s7, EXPLOSION_RANGE, boom_sleep
 		sw $s6, 512($s0)
 		sw $s6, 512($s1)
 		addi $s7, $s7, 1
-		j boom_draw_loop
-boom_sleep:	li $v0, 32
-		li $a0, 500
-		syscall
-		lw $t6, numBomb
-		addi $t7, $t7, -1
-		sub $t7, $t6, $t7
-		addi $t6, $t6, -1
-		sw $t6, numBomb
-boom_remove_loop: blez $t7, boom_erase
-		lw $s6, 4($a2)
-		sw $s6, 0($a2)
-		lw $s6, 4($a3)
-		sw $s6, 0($a3)
+		j rab_on_loop	
+rab_fin:	lw $ra, 0($sp)
+		addi $sp, $sp 4
+		jr $ra
+		
+# This function redraws inactive bombs and updates bombLoc, bombTime, numBomb.	
+redraw_inactive_bomb: addi $sp, $sp, -4
+		sw $ra, 0($sp)
+		la $a1, bombTime
+		la $a2, bombLoc
+		la $a3, bombQueue
+		lw $t7, numBomb
+rib_loop:	blez $t7, rib_fin
+		lw $t0, 0($a3)
+		beq $t0, -1, rib_off
+rib_next:	addi $t7, $t7, -1
+		addi $a1, $a1, 4
 		addi $a2, $a2, 4
 		addi $a3, $a3, 4
-		addi $t7, $t7, -1
-		j boom_remove_loop
-boom_erase:	li $s6, ERASE
-boom_erase_loop: bgt $s0, $s1, boom_fin
+		j rib_loop
+rib_off:	sw $zero, 0($a3)
+		lw $s0, 0($a2)
+		lw $s1, 0($a2)
+		li $s7, 1
+		li $s6, ERASE
+		sw $s6, 0($s0)
+		sw $s6, 256($s0)
+		sw $s6, 512($s0)
+rib_off_loop:	bgt $s7, EXPLOSION_RANGE, rib_remove
+		addi $s0, $s0, -4
+		addi $s1, $s1, 4
 		sw $s6, 0($s0)
 		sw $s6, 0($s1)
 		sw $s6, 256($s0)
 		sw $s6, 256($s1)
 		sw $s6, 512($s0)
 		sw $s6, 512($s1)
-		addi $s0, $s0, 4
-		addi $s1, $s1, -4
-		j boom_erase_loop
-
-boom_fin:	lw $ra, 0($sp)
-		addi $sp, $sp, 4
+		addi $s7, $s7, 1
+		j rib_off_loop
+rib_remove:	lw $t6, numBomb
+		lw $t5, numBomb
+		addi $t5, $t5, -1
+		sw $t5, numBomb
+		add $s1, $a1, $zero
+		add $s2, $a2, $zero
+		add $s3, $a3, $zero
+		beq $t6, 1, rib_remove_one
+		addi $t6, $t7, -1
+rib_remove_loop: blez $t6, rib_remove_next
+		lw $s6, 4($s2)
+		sw $s6, 0($s2)
+		lw $s6, 4($s1)
+		sw $s6, 0($s1)
+		lw $s6, 4($s3)
+		sw $s6, 0($s3)
+		addi $s2, $s2, 4
+		addi $s1, $s1, 4
+		addi $s3, $s3, 4
+		addi $t6, $t6, -1
+		j rib_remove_loop
+rib_remove_next: addi $t7, $t7, -1
+		j rib_loop
+rib_remove_one:	sw $zero, 0($s2)
+		sw $zero, 0($s1)
+		sw $zero, 0($s3)	
+rib_fin:	lw $ra, 0($sp)
+		addi $sp, $sp 4
 		jr $ra
-
-# This function checks players, enemies, bombs in close proximity of an exploding bomb and updates,	
-kill:		addi $sp, $sp, -4
+		
+# This function redraws enemies and updates numEnemy, enemyLoc.
+redraw_enemy: 	addi $sp, $sp, -4
 		sw $ra, 0($sp)
-		la $a2, bombLoc
-		la $a3, bombTime
-		lw $t7, numBomb
-kill_check:	blez $t7, kill_fin
+		la $a2, enemyLoc
+		la $a3, enemyQueue
+		lw $t7, numEnemy
+re_loop:	blez $t7, re_fin
 		lw $t0, 0($a3)
-		blez $t0, kill_player
-kill_check_next: addi $t7, $t7, -1
+		beq $t0, -1, re_remove
+		lw $a0, 0($a2)
+		jal draw_enemy
+		addi $t7, $t7, -1
 		addi $a2, $a2, 4
 		addi $a3, $a3, 4
-		j kill_check
-kill_player:	lw $a0, playerLoc
-		jal xy_address
-		add $t1, $s0, $zero
-		add $t2, $s1, $zero
-		lw $a0, 0($a2)
-		jal xy_address
-		add $t3, $s0, $zero
-		add $t4, $s1, $zero
-		addi $t5, $t2, 2
-		bne $t5, $t4, kill_check_next	# player and bomb not on the same y-coordinate, not kill player
-		addi $t5, $t1, -2
-		addi $t6, $t3, EXPLOSION_RANGE
-		bge $t5, $t6, kill_check_next	# player left >= explosion right, not kill player (allow a bit contact)
-		addi $t5, $t1, 2
-		subi $t6, $t3, EXPLOSION_RANGE
-		ble $t5, $t6, kill_check_next	# player right <= explosion left, not kill player (allow a bit contact)	
-		sw $zero, playerHealth		# player in explosion range, kill player
-kill_enemy:	lw $s7, numEnemy
-		la $s2, enemyLoc
-		lw $a0, 0($a2)
-		jal xy_address
-		add $t1, $s0, $zero
-		add $t2, $s1, $zero
-kill_enemy_loop: blez $s7, kill_enemy_remove
-		lw $a0, 0($s2)
-		jal xy_address
-		add $t3, $s0, $zero
-		add $t4, $s1, $zero
-		bne $t2, $t4, kill_enemy_skip	# enemy and bomb not on the same y-coordinate, not kill enemy
-		addi $t5, $t1, EXPLOSION_RANGE
-		bge $t3, $t5, kill_enemy_skip	# enemy left >= bomb right, not kill enemy
-		subi $t5, $t1, EXPLOSION_RANGE
-		addi $t6, $t3, 2
-		ble $t6, $t5, kill_enemy_skip	# enemy right <= bomb left, not kill enemy
-		li $t5, -1
-		sw $t5, 0($s2)
-kill_enemy_skip: addi $s7, $s7, -1
+		j re_loop
+re_remove:	lw $a0, 0($a2)
+		jal erase_enemy
+		lw $t6, numEnemy
+		lw $t5, numEnemy
+		addi $t5, $t5, -1
+		sw $t5, numEnemy
+		add $s2, $a2, $zero
+		add $s3, $a3, $zero
+		beq $t6, 1, re_remove_one
+		addi $t6, $t7, -1
+re_remove_loop: blez $t6, re_remove_next
+		lw $s6, 4($s2)
+		sw $s6, 0($s2)
+		lw $s6, 4($s3)
+		sw $s6, 0($s3)
 		addi $s2, $s2, 4
-		j kill_enemy_loop
-kill_enemy_remove: lw $s7, numEnemy
-		la $s2, enemyLoc
-		li $t5, 1
-		lw $a0, 0($s2)
-		beq $a0, -1, kill_enemy
-		
-		
-		
-kill_fin:	lw $ra, 0($sp)
-		addi $sp, $sp, 4
+		addi $s3, $s3, 4
+		addi $t6, $t6, -1
+		j re_remove_loop
+re_remove_next: addi $t7, $t7, -1
+		j re_loop
+re_remove_one:	sw $zero, 0($s2)
+		sw $zero, 0($s3)	
+re_fin:		lw $ra, 0($sp)
+		addi $sp, $sp 4
 		jr $ra
 						
 # This function clears the screen.
