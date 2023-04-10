@@ -74,6 +74,11 @@
 .eqv HEALTH_BAR_EMPTY 0xb4b4b4
 .eqv FAIL_TEXT 0xed1c23
 .eqv FAIL_SHADOW 0x990030
+.eqv WIN_TEXT 0xed1c23
+.eqv WIN_SHADOW 0x990030
+.eqv WIN_CUP_FILL 0xffc30e
+.eqv WIN_CUP_SHADOW 0xe2af14
+.eqv WIN_CUP_LIGHT 0xffd557
 
 
 # ASCII values for input keys
@@ -124,6 +129,8 @@ newline:		.asciiz		"\n"
 .text
 .globl main
 setup:		jal erase_screen
+		jal you_win
+		jal erase_screen
 		li $t9, HEALTH			# Reset playerHealth
 		sw $t9, playerHealth
 		sw $zero, playerLoc + 4		# Reset xVelocity
@@ -1369,3 +1376,233 @@ game_over:	li $a0, 0x1000984C
 		sw $s0, 1284($a0)
 		sw $s0, 1296($a0)
 		jr $ra
+		
+# This function draws win screen.		
+you_win:	li $a0, 0x10009D28
+		li $s0, WIN_TEXT		# Y
+		sw $s0, 0($a0)
+		sw $s0, 16($a0)
+		sw $s0, 256($a0)
+		sw $s0, 272($a0)
+		sw $s0, 512($a0)
+		sw $s0, 528($a0)
+		sw $s0, 772($a0)
+		sw $s0, 776($a0)
+		sw $s0, 780($a0)
+		sw $s0, 1032($a0)
+		sw $s0, 1288($a0)
+		li $s0, WIN_SHADOW
+		sw $s0, 4($a0)
+		sw $s0, 20($a0)
+		sw $s0, 260($a0)
+		sw $s0, 276($a0)
+		sw $s0, 516($a0)
+		sw $s0, 532($a0)
+		sw $s0, 784($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1292($a0)
+		addi $a0, $a0, 28		# O
+		li $s0, FAIL_TEXT
+		sw $s0, 4($a0)
+		sw $s0, 8($a0)
+		sw $s0, 256($a0)
+		sw $s0, 268($a0)
+		sw $s0, 512($a0)
+		sw $s0, 524($a0)
+		sw $s0, 768($a0)
+		sw $s0, 780($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1288($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 12($a0)
+		sw $s0, 260($a0)
+		sw $s0, 272($a0)
+		sw $s0, 516($a0)
+		sw $s0, 528($a0)
+		sw $s0, 772($a0)
+		sw $s0, 784($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1040($a0)
+		sw $s0, 1292($a0)
+		addi $a0, $a0, 24		# U
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 12($a0)
+		sw $s0, 256($a0)
+		sw $s0, 268($a0)
+		sw $s0, 512($a0)
+		sw $s0, 524($a0)
+		sw $s0, 768($a0)
+		sw $s0, 780($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1288($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 4($a0)
+		sw $s0, 16($a0)
+		sw $s0, 260($a0)
+		sw $s0, 272($a0)
+		sw $s0, 516($a0)
+		sw $s0, 528($a0)
+		sw $s0, 772($a0)
+		sw $s0, 784($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1040($a0)
+		sw $s0, 1292($a0)
+		addi $a0, $a0, 32		# W
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 24($a0)
+		sw $s0, 256($a0)
+		sw $s0, 280($a0)
+		sw $s0, 512($a0)
+		sw $s0, 536($a0)
+		sw $s0, 768($a0)
+		sw $s0, 780($a0)
+		sw $s0, 792($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1032($a0)
+		sw $s0, 1040($a0)
+		sw $s0, 1048($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1300($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 4($a0)
+		sw $s0, 28($a0)
+		sw $s0, 260($a0)
+		sw $s0, 284($a0)
+		sw $s0, 516($a0)
+		sw $s0, 540($a0)
+		sw $s0, 772($a0)
+		sw $s0, 784($a0)
+		sw $s0, 796($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1044($a0)
+		sw $s0, 1052($a0)
+		sw $s0, 1288($a0)
+		sw $s0, 1304($a0)
+		addi $a0, $a0, 36		# I
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 256($a0)
+		sw $s0, 512($a0)
+		sw $s0, 768($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1280($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 4($a0)
+		sw $s0, 260($a0)
+		sw $s0, 516($a0)
+		sw $s0, 772($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1284($a0)
+		addi $a0, $a0, 12		# N
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 4($a0)
+		sw $s0, 20($a0)
+		sw $s0, 256($a0)
+		sw $s0, 264($a0)
+		sw $s0, 276($a0)
+		sw $s0, 512($a0)
+		sw $s0, 520($a0)
+		sw $s0, 532($a0)
+		sw $s0, 768($a0)
+		sw $s0, 780($a0)
+		sw $s0, 788($a0)
+		sw $s0, 1024($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1044($a0)
+		sw $s0, 1280($a0)
+		sw $s0, 1296($a0)
+		sw $s0, 1300($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 8($a0)
+		sw $s0, 24($a0)
+		sw $s0, 260($a0)
+		sw $s0, 268($a0)
+		sw $s0, 280($a0)
+		sw $s0, 516($a0)
+		sw $s0, 524($a0)
+		sw $s0, 536($a0)
+		sw $s0, 772($a0)
+		sw $s0, 784($a0)
+		sw $s0, 792($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1040($a0)
+		sw $s0, 1048($a0)
+		sw $s0, 1284($a0)
+		sw $s0, 1304($a0)
+		addi $a0, $a0, 36		# !
+		li $s0, FAIL_TEXT
+		sw $s0, 0($a0)
+		sw $s0, 256($a0)
+		sw $s0, 512($a0)
+		sw $s0, 768($a0)
+		sw $s0, 1280($a0)
+		li $s0, FAIL_SHADOW
+		sw $s0, 4($a0)
+		sw $s0, 260($a0)
+		sw $s0, 516($a0)
+		sw $s0, 772($a0)
+		sw $s0, 1284($a0)
+		li $a0, 0x10009270		# cup
+		li $s0, WIN_CUP_FILL
+		sw $s0, 8($a0)
+		sw $s0, 12($a0)
+		sw $s0, 16($a0)
+		sw $s0, 20($a0)
+		sw $s0, 24($a0)
+		sw $s0, 264($a0)
+		sw $s0, 272($a0)
+		sw $s0, 276($a0)
+		sw $s0, 280($a0)
+		sw $s0, 512($a0)
+		sw $s0, 516($a0)
+		sw $s0, 520($a0)
+		sw $s0, 528($a0)
+		sw $s0, 532($a0)
+		sw $s0, 536($a0)
+		sw $s0, 544($a0)
+		sw $s0, 548($a0)
+		sw $s0, 768($a0)
+		sw $s0, 776($a0)
+		sw $s0, 784($a0)
+		sw $s0, 788($a0)
+		sw $s0, 792($a0)
+		sw $s0, 804($a0)
+		sw $s0, 1028($a0)
+		sw $s0, 1032($a0)
+		sw $s0, 1036($a0)
+		sw $s0, 1044($a0)
+		sw $s0, 1048($a0)
+		sw $s0, 1056($a0)
+		sw $s0, 1292($a0)
+		sw $s0, 1296($a0)
+		sw $s0, 1300($a0)
+		sw $s0, 1552($a0)
+		sw $s0, 2060($a0)
+		sw $s0, 2064($a0)
+		sw $s0, 2068($a0)
+		sw $s0, 2072($a0)
+		li $s0, WIN_CUP_SHADOW
+		sw $s0, 28($a0)
+		sw $s0, 284($a0)
+		sw $s0, 540($a0)
+		sw $s0, 796($a0)
+		sw $s0, 1052($a0)
+		sw $s0, 1304($a0)
+		sw $s0, 1556($a0)
+		sw $s0, 1808($a0)
+		sw $s0, 1812($a0)
+		li $s0, WIN_CUP_LIGHT
+		sw $s0, 268($a0)
+		sw $s0, 524($a0)
+		sw $s0, 780($a0)
+		sw $s0, 1040($a0)
+		jr $ra
+		
