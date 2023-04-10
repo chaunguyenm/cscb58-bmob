@@ -13,25 +13,25 @@
 # - Base Address for Display: 0x10008000 ($gp)
 #
 # Which milestones have been reached in this submission?
-# (See the assignment handout for descriptions of the milestones)
 # - Milestone 1
 # - Milestone 2
+# - Milestone 3
 #
 # Which approved features have been implemented for milestone 3?
-# (See the assignment handout for the list of additional features)
 # 1. Double jump
-# 2. (fill in the feature, if any)
-# 3. (fill in the feature, if any)
-# ... (add more if necessary)
+# 2. Health
+# 3. Fail condition
+# 4. Win condition
+# 5. Shoot enemies
 #
 # Link to video demonstration for final submission:
 # - (insert YouTube / MyMedia / other URL here). Make sure we can view it!
 #
 # Are you OK with us sharing the video with people outside course staff?
-# - yes / no / yes, and please share this project github link as well!
+# - yes, and please share this project github link as well!
 #
 # Any additional information that the TA needs to know:
-# - (write here, if any)
+#
 #
 #####################################################################
 
@@ -113,6 +113,7 @@ platformQueue:		.word		0:10
 
 numEnemy:		.word		0
 enemyLoc:		.word		0:10
+enemyPos:		.word		0, 0, 10, 0, 0, 0
 enemyQueue:		.word		0:10
 
 numBomb:		.word		0
@@ -128,9 +129,7 @@ newline:		.asciiz		"\n"
 
 .text
 .globl main
-setup:		#jal erase_screen
-		#jal you_win
-		jal erase_screen
+setup:		jal erase_screen
 		li $t9, HEALTH			# Reset playerHealth
 		sw $t9, playerHealth
 		sw $zero, playerLoc + 4		# Reset xVelocity
@@ -206,7 +205,7 @@ setup_level1:	li $a0, 3			# Store number of platforms and enemies for this level
 		jal draw_bomb			# Draw bomb
 			
 		# Draw first enemy
-		li $a0, 0			# Compute start memory address
+		li $a0, 2			# Compute start memory address
 		li $a1, 14
 		jal bitmap_address
 		sw $s0, enemyLoc		# Store location of enemy in enemyState
@@ -408,6 +407,7 @@ update:		jal explosion
 		jal redraw_enemy
 		lw $a0, numEnemy
 		beqz $a0, level_up
+		jal move_enemy
 		jal collision_screen
 		jal collision_platform
 		jal collision_bomb
@@ -669,7 +669,7 @@ cb_left:	addi $t5, $t1, -3
 		li $t5, 1			# Update collision with bomb on the left
 		sw $t5, collisionBomb
 cb_right:	addi $t5, $t1, 3
-		addi $t6, $t6, -1
+		addi $t6, $t3, -1
 		bne $t5, $t6, cb_top		# player right + 1 != bomb left, no right collision
 		addi $t5, $t2, 4
 		blt $t5, $t4, cb_top		# player bottom < bomb top, no right collision
@@ -1009,6 +1009,7 @@ rib_fin:	lw $ra, 0($sp)
 # This function redraws enemies and updates numEnemy, enemyLoc.
 redraw_enemy: 	addi $sp, $sp, -4
 		sw $ra, 0($sp)
+		la $a1, enemyPos
 		la $a2, enemyLoc
 		la $a3, enemyQueue
 		lw $t7, numEnemy
@@ -1018,6 +1019,7 @@ re_loop:	blez $t7, re_fin
 		lw $a0, 0($a2)
 		jal draw_enemy
 		addi $t7, $t7, -1
+		addi $a1, $a1, 4
 		addi $a2, $a2, 4
 		addi $a3, $a3, 4
 		j re_loop
@@ -1027,25 +1029,86 @@ re_remove:	lw $a0, 0($a2)
 		lw $t5, numEnemy
 		addi $t5, $t5, -1
 		sw $t5, numEnemy
+		add $s1, $a1, $zero
 		add $s2, $a2, $zero
 		add $s3, $a3, $zero
 		beq $t6, 1, re_remove_one
 		addi $t6, $t7, -1
 re_remove_loop: blez $t6, re_remove_next
+		lw $s6, 4($s1)
+		sw $s6, 0($s1)
 		lw $s6, 4($s2)
 		sw $s6, 0($s2)
 		lw $s6, 4($s3)
 		sw $s6, 0($s3)
+		addi $s1, $s1, 4
 		addi $s2, $s2, 4
 		addi $s3, $s3, 4
 		addi $t6, $t6, -1
 		j re_remove_loop
 re_remove_next: addi $t7, $t7, -1
 		j re_loop
-re_remove_one:	sw $zero, 0($s2)
+re_remove_one:	sw $zero, 0($s1)
+		sw $zero, 0($s2)
 		sw $zero, 0($s3)	
 re_fin:		lw $ra, 0($sp)
 		addi $sp, $sp 4
+		jr $ra
+		
+# This function moves enemies.
+move_enemy:	addi $sp, $sp, -4
+		sw $ra, 0($sp)
+		la $s1, enemyLoc
+		la $s2, enemyPos
+		lw $t0, numEnemy
+me_loop:	blez $t0, me_fin
+		lw $a0, 0($s1)
+		jal erase_enemy
+		lw $s0, 0($s1)
+		lw $t1, 0($s2)
+		lw $t3, 12($s0)
+		bne $t3, ERASE, me_cont
+		lw $t3, 268($s0)
+		bne $t3, ERASE, me_cont
+		lw $t3, 524($s0)
+		bne $t3, ERASE, me_cont
+		lw $t3, -4($s0)
+		bne $t3, ERASE, me_cont
+		lw $t3, 252($s0)
+		bne $t3, ERASE, me_cont
+		lw $t3, 508($s0)
+		bne $t3, ERASE, me_cont
+		beq $t1, 10, me_left
+		beqz $t1, me_right
+		lw $t2, 4($s2)
+		add $s0, $s0, $t2
+		bltz $t2, me_cont_left
+me_cont_right:	addi $t1, $t1, 1
+		sw $t1, 0($s2)
+		j me_cont
+me_cont_left:	addi $t1, $t1, -1
+		sw $t1, 0($s2)
+		j me_cont
+me_right:	addi $s0, $s0, 4
+		addi $t1, $t1, 1
+		sw $t1, 0($s2)
+		li $t2, 4
+		sw $t2, 4($s2)
+		j me_cont
+me_left:	addi $s0, $s0, -4
+		addi $t1, $t1, -1
+		sw $t1, 0($s2)
+		li $t2, -4
+		sw $t2, 4($s2)
+me_cont:	sw $s0, 0($s1)
+		add $a0, $s0, $zero
+		jal draw_enemy
+		addi $t0, $t0, -1
+		addi $s1, $s1, 4
+		addi $s2, $s2, 8
+		j me_loop
+me_fin:		lw $ra, 0($sp)
+		addi $sp, $sp, 4
 		jr $ra
 						
 # This function clears the screen.
@@ -1130,9 +1193,6 @@ xy_address:	subi $a0, $a0, BASE_ADDRESS	# Get offset from (0, 0)
 		mfhi $s0			# Remainder is x
 		mflo $s1			# Quotient is y
 		jr $ra
-
-# This functions takes the array address at $a0 and its initial length at $a1 and removes empty entries.
-rearrange:	
 
 # This function draws a platform of size $a1 starting from memory address $a0.	
 # Arguments:	Start address	$a0
